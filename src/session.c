@@ -350,6 +350,8 @@ void sess_establish(struct session *s, struct stream_interface *si)
 	rep->analysers |= s->fe->fe_rsp_ana | s->be->be_rsp_ana;
 	rep->flags |= BF_READ_ATTACHED; /* producer is now attached */
 	req->wex = TICK_ETERNITY;
+
+	stats_event_new_session(s);
 }
 
 /* Update stream interface status for input states SI_ST_ASS, SI_ST_QUE, SI_ST_TAR.
@@ -1654,6 +1656,8 @@ resync_stream_interface:
 	    (!(s->fe->options & PR_O_NULLNOLOG) || s->req->total)) {
 		s->do_log(s);
 	}
+
+	stats_event_end_session(s);
 
 	/* the task MUST not be in the run queue anymore */
 	session_free(s);

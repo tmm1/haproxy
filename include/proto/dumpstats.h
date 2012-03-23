@@ -53,6 +53,8 @@
 #define STAT_CLI_O_SESS 6   /* dump sessions */
 #define STAT_CLI_O_ERR  7   /* dump errors */
 
+#define STAT_CLI_EVENTS 8   /* event stream */
+
 /* status codes (strictly 4 chars) used in the URL to display a message */
 #define STAT_STATUS_UNKN "UNKN"	/* an unknown error occured, shouldn't happen */
 #define STAT_STATUS_DONE "DONE"	/* the action is successful */
@@ -63,6 +65,8 @@
 
 int stats_sock_parse_request(struct stream_interface *si, char *line);
 void stats_io_handler(struct stream_interface *si);
+void stats_event_new_session(struct session *s);
+void stats_event_end_session(struct session *s);
 int stats_dump_raw_to_buffer(struct session *s, struct buffer *rep);
 int stats_dump_http(struct session *s, struct buffer *rep, struct uri_auth *uri);
 int stats_dump_proxy(struct session *s, struct proxy *px, struct uri_auth *uri);

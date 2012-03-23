@@ -52,6 +52,23 @@
 #include <proto/stream_interface.h>
 #include <proto/task.h>
 
+static struct list stats_event_listeners = LIST_HEAD_INIT(stats_event_listeners);
+
+static inline void stats_event_listener_add(struct session *s)
+{
+	LIST_ADDQ(&stats_event_listeners, &s->data_ctx.events.list);
+}
+
+static inline void stats_event_listener_remove(struct session *s)
+{
+	if (!LIST_ISEMPTY(&stats_event_listeners)) {
+		LIST_DEL(&s->data_ctx.events.list);
+	}
+
+	/* Re-initialize stats output */
+	memset(&s->data_ctx.stats, 0, sizeof(s->data_ctx.stats));
+}
+
 const char stats_sock_usage_msg[] =
 	"Unknown command. Please enter one of the following commands only :\n"
 	"  clear counters : clear max statistics counters (add 'all' for all counters)\n"
@@ -62,6 +79,7 @@ const char stats_sock_usage_msg[] =
 	"  show stat      : report counters for each proxy and server\n"
 	"  show errors    : report last request and response errors for each proxy\n"
 	"  show sess [id] : report the list of current sessions or dump this session\n"
+	"  show events    : stream events about proxied sessions\n"
 	"  get weight     : report a server's current weight\n"
 	"  set weight     : change a server's weight\n"
 	"  set timeout    : change a timeout setting\n"
@@ -358,7 +376,11 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 			s->data_state = DATA_ST_INIT;
 			si->st0 = STAT_CLI_O_ERR; // stats_dump_errors_to_buffer
 		}
-		else { /* neither "stat" nor "info" nor "sess" nor "errors"*/
+		else if (strcmp(args[1], "events") == 0) {
+			si->st0 = STAT_CLI_EVENTS;
+			stats_event_listener_add(s);
+		}
+		else { /* neither "stat" nor "info" nor "sess" nor "errors" nor "events" */
 			return 0;
 		}
 	}
@@ -681,6 +703,88 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 	return 1;
 }
 
+void stats_event_new_session(struct session *s)
+{
+	struct session *curr;
+	struct stream_interface *si;
+	int ret;
+
+	char addrs[4][INET6_ADDRSTRLEN + strlen(":65535") + 1] = {"","","",""};
+	int i, fd, port;
+	const void *addr;
+	struct sockaddr_storage sock;
+	socklen_t addr_size;
+
+	for(i = 0; i < 4; i++) {
+		fd = s->si[ i/2 ].fd;
+
+		addr_size = sizeof(sock);
+		if (!(i%2==0 ? getpeername : getsockname)(fd, (struct sockaddr *)&sock, &addr_size)) {
+			switch (sock.ss_family) {
+			case AF_INET:
+				addr = (const void *)&((struct sockaddr_in *)&sock)->sin_addr;
+				port = ntohs(((struct sockaddr_in *)&sock)->sin_port);
+				inet_ntop(sock.ss_family, addr, addrs[i], sizeof(addrs[i]));
+				snprintf(addrs[i], sizeof(addrs[i]), "%s:%d", addrs[i], port);
+				break;
+
+			case AF_INET6:
+				addr = (const void *)&((struct sockaddr_in6 *)&sock)->sin6_addr;
+				port = ntohs(((struct sockaddr_in6 *)&sock)->sin6_port);
+				inet_ntop(sock.ss_family, addr, addrs[i], sizeof(addrs[i]));
+				snprintf(addrs[i], sizeof(addrs[i]), "%s:%d", addrs[i], port);
+				break;
+
+			case AF_UNIX:
+			default:
+				sprintf(addrs[i], "%s", "unknown");
+			}
+		}
+	}
+
+	if (LIST_ISEMPTY(&stats_event_listeners))
+		return;
+
+	snprintf(trash, sizeof(trash), "+ %u %s %s %s %s\n",
+		s->uniq_id,
+		addrs[0], // inbound peer
+		addrs[1], // inbound sock
+		addrs[3], // outbound sock
+		addrs[2]  // outbound peer
+	);
+
+	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
+		si = &curr->si[1];
+
+		ret = buffer_feed(si->ib, trash);
+		if (ret == -1 && si->owner) {
+			si->ib->flags |= BF_SEND_DONTWAIT;
+			task_wakeup(si->owner, TASK_WOKEN_MSG);
+		}
+	}
+}
+
+void stats_event_end_session(struct session *s)
+{
+	struct session *curr;
+	struct stream_interface *si;
+	int ret;
+
+	if (LIST_ISEMPTY(&stats_event_listeners))
+		return;
+
+	snprintf(trash, sizeof(trash), "- %u\n", s->uniq_id);
+	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
+		si = &curr->si[1];
+
+		ret = buffer_feed(si->ib, trash);
+		if (ret == -1 && si->owner) {
+			si->ib->flags |= BF_SEND_DONTWAIT;
+			task_wakeup(si->owner, TASK_WOKEN_MSG);
+		}
+	}
+}
+
 /* This I/O handler runs as an applet embedded in a stream interface. It is
  * used to processes I/O from/to the stats unix socket. The system relies on a
  * state machine handling requests and various responses. We read a request,
@@ -714,7 +818,7 @@ void stats_io_handler(struct stream_interface *si)
 			si->shutw(si);
 			break;
 		}
-		else if (si->st0 == STAT_CLI_GETREQ) {
+		else if (si->st0 == STAT_CLI_GETREQ || si->st0 == STAT_CLI_EVENTS) {
 			/* ensure we have some output room left in the event we
 			 * would want to return some info right after parsing.
 			 */
@@ -754,7 +858,11 @@ void stats_io_handler(struct stream_interface *si)
 
 			trash[len] = '\0';
 
+			if (si->st0 == STAT_CLI_EVENTS)
+				stats_event_listener_remove(s);
+
 			si->st0 = STAT_CLI_PROMPT;
+
 			if (len) {
 				if (strcmp(trash, "quit") == 0) {
 					si->st0 = STAT_CLI_END;
@@ -840,7 +948,7 @@ void stats_io_handler(struct stream_interface *si)
 	if ((res->flags & BF_SHUTR) && (si->state == SI_ST_EST) && (si->st0 != STAT_CLI_GETREQ)) {
 		DPRINTF(stderr, "%s@%d: si to buf closed. req=%08x, res=%08x, st=%d\n",
 			__FUNCTION__, __LINE__, req->flags, res->flags, si->state);
-		/* Other size has closed, let's abort if we have no more processing to do
+		/* Other side has closed, let's abort if we have no more processing to do
 		 * and nothing more to consume. This is comparable to a broken pipe, so
 		 * we forward the close to the request side so that it flows upstream to
 		 * the client.
@@ -866,12 +974,17 @@ void stats_io_handler(struct stream_interface *si)
 	si->ib->rex = TICK_ETERNITY;
 	si->ob->wex = TICK_ETERNITY;
 
+	/* no timeouts when streaming events */
+	if (si->st0 == STAT_CLI_EVENTS)
+		s->req->rex = TICK_ETERNITY;
+
  out:
 	DPRINTF(stderr, "%s@%d: st=%d, rqf=%x, rpf=%x, rql=%d, rqs=%d, rl=%d, rs=%d\n",
 		__FUNCTION__, __LINE__,
 		si->state, req->flags, res->flags, req->l, req->send_max, res->l, res->send_max);
 
 	if (unlikely(si->state == SI_ST_DIS || si->state == SI_ST_CLO)) {
+		stats_event_listener_remove(s);
 		/* check that we have released everything then unregister */
 		stream_int_unregister_handler(si);
 	}

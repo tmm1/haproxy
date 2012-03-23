@@ -8526,6 +8526,17 @@ show errors [<iid>]
     is the slash ('/') in header name "header/bizarre", which is not a valid
     HTTP character for a header name.
 
+show events
+  Dump a stream of events about sessions as they are created and destroyed.
+  Streaming will continue until a new command is sent over the stats socket.
+
+  Example:
+    >>> $ echo "show show events" | socat stdio,ignoreeof /tmp/sock1
+        + 1 127.0.0.1:50869 127.0.0.1:9418 127.0.0.1:50870 127.0.0.1:6000
+        - 1
+        + 2 127.0.0.1:50874 127.0.0.1:9418 127.0.0.1:50875 127.0.0.1:6000
+        - 2
+
 show info
   Dump info about haproxy status on current process.
 
