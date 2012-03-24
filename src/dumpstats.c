@@ -52,36 +52,6 @@
 #include <proto/stream_interface.h>
 #include <proto/task.h>
 
-static struct list stats_event_listeners = LIST_HEAD_INIT(stats_event_listeners);
-int stats_event_enabled = 0;
-
-static inline void stats_event_listener_add(struct session *s)
-{
-	LIST_ADDQ(&stats_event_listeners, &s->data_ctx.events.list);
-	stats_event_enabled = 1;
-}
-
-static inline void stats_event_listener_remove(struct session *s)
-{
-	int found = 0;
-	struct session *curr;
-	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
-		if (curr == s) {
-			found = 1;
-			break;
-		}
-	}
-
-	if (found)
-		LIST_DEL(&s->data_ctx.events.list);
-
-	if (LIST_ISEMPTY(&stats_event_listeners))
-		stats_event_enabled = 0;
-
-	/* Re-initialize stats output */
-	memset(&s->data_ctx.stats, 0, sizeof(s->data_ctx.stats));
-}
-
 const char stats_sock_usage_msg[] =
 	"Unknown command. Please enter one of the following commands only :\n"
 	"  clear counters : clear max statistics counters (add 'all' for all counters)\n"
@@ -103,6 +73,43 @@ const char stats_sock_usage_msg[] =
 const char stats_permission_denied_msg[] =
 	"Permission denied\n"
 	"";
+
+/* Keep track of sessions that want events streamed to them
+ */
+int stats_event_enabled = 0;
+static struct list stats_event_listeners = LIST_HEAD_INIT(stats_event_listeners);
+
+/* Add a session to the list of event listeners.
+ */
+static inline void stats_event_listener_add(struct session *s)
+{
+	LIST_ADDQ(&stats_event_listeners, &s->data_ctx.events.list);
+	stats_event_enabled = 1;
+}
+
+/* Remove a session from the list of listeners, but only if it is in
+ * the list already.
+ */
+static inline void stats_event_listener_remove(struct session *s)
+{
+	int found = 0;
+	struct session *curr;
+	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
+		if (curr == s) {
+			found = 1;
+			break;
+		}
+	}
+
+	if (found)
+		LIST_DEL(&s->data_ctx.events.list);
+
+	if (LIST_ISEMPTY(&stats_event_listeners))
+		stats_event_enabled = 0;
+
+	/* Re-initialize stats output */
+	memset(&s->data_ctx.stats, 0, sizeof(s->data_ctx.stats));
+}
 
 /* allocate a new stats frontend named <name>, and return it
  * (or NULL in case of lack of memory).
