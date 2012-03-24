@@ -756,7 +756,9 @@ void stats_event_new_session(struct session *s)
 	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
 		si = &curr->si[1];
 
-		if (si->owner && buffer_feed(si->ib, trash) == -1) {
+		if (!(si->flags & SI_FL_DONT_WAKE) &&
+		    si->owner &&
+		    buffer_feed(si->ib, trash) == -1) {
 			si->ib->flags |= BF_SEND_DONTWAIT;
 			task_wakeup(si->owner, TASK_WOKEN_MSG);
 		}
@@ -775,7 +777,9 @@ void stats_event_end_session(struct session *s)
 	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
 		si = &curr->si[1];
 
-		if (si->owner && buffer_feed(si->ib, trash) == -1) {
+		if (!(si->flags & SI_FL_DONT_WAKE) &&
+		    si->owner &&
+		    buffer_feed(si->ib, trash) == -1) {
 			si->ib->flags |= BF_SEND_DONTWAIT;
 			task_wakeup(si->owner, TASK_WOKEN_MSG);
 		}
