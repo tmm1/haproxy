@@ -53,10 +53,12 @@
 #include <proto/task.h>
 
 static struct list stats_event_listeners = LIST_HEAD_INIT(stats_event_listeners);
+int stats_event_enabled = 0;
 
 static inline void stats_event_listener_add(struct session *s)
 {
 	LIST_ADDQ(&stats_event_listeners, &s->data_ctx.events.list);
+	stats_event_enabled = 1;
 }
 
 static inline void stats_event_listener_remove(struct session *s)
@@ -72,6 +74,9 @@ static inline void stats_event_listener_remove(struct session *s)
 
 	if (found)
 		LIST_DEL(&s->data_ctx.events.list);
+
+	if (LIST_ISEMPTY(&stats_event_listeners))
+		stats_event_enabled = 0;
 
 	/* Re-initialize stats output */
 	memset(&s->data_ctx.stats, 0, sizeof(s->data_ctx.stats));

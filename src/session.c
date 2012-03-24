@@ -351,7 +351,8 @@ void sess_establish(struct session *s, struct stream_interface *si)
 	rep->flags |= BF_READ_ATTACHED; /* producer is now attached */
 	req->wex = TICK_ETERNITY;
 
-	stats_event_new_session(s);
+	if (unlikely(stats_event_enabled))
+		stats_event_new_session(s);
 }
 
 /* Update stream interface status for input states SI_ST_ASS, SI_ST_QUE, SI_ST_TAR.
@@ -1657,11 +1658,10 @@ resync_stream_interface:
 		s->do_log(s);
 	}
 
-	if ((s->si[0].state      == SI_ST_CLO &&
-	     s->si[0].prev_state == SI_ST_EST) &&
-	    (s->si[1].state      == SI_ST_CLO &&
-	     s->si[1].prev_state == SI_ST_EST)) {
-		stats_event_end_session(s);
+	if (unlikely(stats_event_enabled)) {
+		if (s->si[1].state      == SI_ST_CLO &&
+		    s->si[1].prev_state == SI_ST_EST)
+			stats_event_end_session(s);
 	}
 
 	/* the task MUST not be in the run queue anymore */

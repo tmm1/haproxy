@@ -62,6 +62,7 @@
 #define STAT_STATUS_EXCD "EXCD"	/* an error occured becayse the buffer couldn't store all data */
 #define STAT_STATUS_DENY "DENY"	/* action denied */
 
+extern int stats_event_enabled;
 
 int stats_sock_parse_request(struct stream_interface *si, char *line);
 void stats_io_handler(struct stream_interface *si);
