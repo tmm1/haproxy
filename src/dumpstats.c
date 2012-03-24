@@ -703,89 +703,6 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 	return 1;
 }
 
-void stats_event_new_session(struct session *s)
-{
-	struct session *curr;
-	struct stream_interface *si;
-
-	char addrs[4][INET6_ADDRSTRLEN + strlen(":65535") + 1] = {"","","",""};
-	int i, fd, port = 0;
-	const void *sin_addr = NULL;
-	struct sockaddr_storage sock;
-	socklen_t addr_size;
-
-	for(i = 0; i < 4; i++) {
-		fd = s->si[ i/2 ].fd;
-
-		addr_size = sizeof(sock);
-		if (!(i%2==0 ? getpeername : getsockname)(fd, (struct sockaddr *)&sock, &addr_size)) {
-			switch (sock.ss_family) {
-			case AF_INET:
-				sin_addr = (const void *)&((struct sockaddr_in *)&sock)->sin_addr;
-				port = ntohs(((struct sockaddr_in *)&sock)->sin_port);
-				break;
-			case AF_INET6:
-				sin_addr = (const void *)&((struct sockaddr_in6 *)&sock)->sin6_addr;
-				port = ntohs(((struct sockaddr_in6 *)&sock)->sin6_port);
-				break;
-			}
-			switch (sock.ss_family) {
-			case AF_INET:
-			case AF_INET6:
-				inet_ntop(sock.ss_family, sin_addr, addrs[i], sizeof(addrs[i]));
-				snprintf(addrs[i]+strlen(addrs[i]), sizeof(addrs[i])-strlen(addrs[i])-1, ":%d", port);
-				break;
-			case AF_UNIX:
-			default:
-				sprintf(addrs[i], "%s", "unknown");
-			}
-		}
-	}
-
-	if (LIST_ISEMPTY(&stats_event_listeners))
-		return;
-
-	snprintf(trash, sizeof(trash), "+ %u %s %s %s %s\n",
-		s->uniq_id,
-		addrs[0], // inbound peer
-		addrs[1], // inbound sock
-		addrs[3], // outbound sock
-		addrs[2]  // outbound peer
-	);
-
-	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
-		si = &curr->si[1];
-
-		if (!(si->flags & SI_FL_DONT_WAKE) &&
-		    si->owner &&
-		    buffer_feed(si->ib, trash) == -1) {
-			si->ib->flags |= BF_SEND_DONTWAIT;
-			task_wakeup(si->owner, TASK_WOKEN_MSG);
-		}
-	}
-}
-
-void stats_event_end_session(struct session *s)
-{
-	struct session *curr;
-	struct stream_interface *si;
-
-	if (LIST_ISEMPTY(&stats_event_listeners))
-		return;
-
-	snprintf(trash, sizeof(trash), "- %u\n", s->uniq_id);
-	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
-		si = &curr->si[1];
-
-		if (!(si->flags & SI_FL_DONT_WAKE) &&
-		    si->owner &&
-		    buffer_feed(si->ib, trash) == -1) {
-			si->ib->flags |= BF_SEND_DONTWAIT;
-			task_wakeup(si->owner, TASK_WOKEN_MSG);
-		}
-	}
-}
-
 /* This I/O handler runs as an applet embedded in a stream interface. It is
  * used to processes I/O from/to the stats unix socket. The system relies on a
  * state machine handling requests and various responses. We read a request,
@@ -3244,6 +3161,94 @@ int stats_dump_errors_to_buffer(struct session *s, struct buffer *rep)
 	return 1;
 }
 
+/* Called whenever a new session is successfully established (reaches
+ * SI_ST_EST). If there are any stats sockets listening in the
+ * STAT_CLI_EVENTS state, they will be notified of this session's unique
+ * id, along with the sockname and peername of both sides of the session.
+ */
+void stats_event_new_session(struct session *s)
+{
+	if (LIST_ISEMPTY(&stats_event_listeners))
+		return;
+
+	char addrs[4][INET6_ADDRSTRLEN + strlen(":65535") + 1] = {"","","",""};
+	int i;
+
+	for(i = 0; i < 4; i++) {
+		struct sockaddr_storage sock;
+		socklen_t addr_size = sizeof(sock);
+		const void *sin_addr = NULL;
+		int port = 0;
+		int fd = s->si[ i/2 ].fd;
+
+		if (!(i%2==0 ? getpeername : getsockname)(fd, (struct sockaddr *)&sock, &addr_size)) {
+			switch (sock.ss_family) {
+			case AF_INET:
+				sin_addr = (const void *)&((struct sockaddr_in *)&sock)->sin_addr;
+				port = ntohs(((struct sockaddr_in *)&sock)->sin_port);
+				break;
+			case AF_INET6:
+				sin_addr = (const void *)&((struct sockaddr_in6 *)&sock)->sin6_addr;
+				port = ntohs(((struct sockaddr_in6 *)&sock)->sin6_port);
+				break;
+			}
+			switch (sock.ss_family) {
+			case AF_INET:
+			case AF_INET6:
+				inet_ntop(sock.ss_family, sin_addr, addrs[i], sizeof(addrs[i]));
+				snprintf(addrs[i]+strlen(addrs[i]), sizeof(addrs[i])-strlen(addrs[i])-1, ":%d", port);
+				break;
+			case AF_UNIX:
+			default:
+				sprintf(addrs[i], "%s", "unknown");
+			}
+		}
+	}
+
+	snprintf(trash, sizeof(trash), "+ %u %s %s %s %s\n",
+	  s->uniq_id,
+	  addrs[0], // inbound peer
+	  addrs[1], // inbound sock
+	  addrs[3], // outbound sock
+	  addrs[2]  // outbound peer
+	);
+
+	struct session *curr;
+	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
+		struct stream_interface *si = &curr->si[1];
+
+		if (!(si->flags & SI_FL_DONT_WAKE) &&
+		    si->owner &&
+		    buffer_feed(si->ib, trash) == -1) {
+			si->ib->flags |= BF_SEND_DONTWAIT;
+			task_wakeup(si->owner, TASK_WOKEN_MSG);
+		}
+	}
+}
+
+/* Called when a session's si[1]->state goes from SI_ST_EST to
+ * SI_ST_CLO. Any stats listeners are notified of this session's
+ * destruction.
+ */
+void stats_event_end_session(struct session *s)
+{
+	if (LIST_ISEMPTY(&stats_event_listeners))
+		return;
+
+	snprintf(trash, sizeof(trash), "- %u\n", s->uniq_id);
+
+	struct session *curr;
+	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
+		struct stream_interface *si = &curr->si[1];
+
+		if (!(si->flags & SI_FL_DONT_WAKE) &&
+		    si->owner &&
+		    buffer_feed(si->ib, trash) == -1) {
+			si->ib->flags |= BF_SEND_DONTWAIT;
+			task_wakeup(si->owner, TASK_WOKEN_MSG);
+		}
+	}
+}
 
 static struct cfg_kw_list cfg_kws = {{ },{
 	{ CFG_GLOBAL, "stats", stats_parse_global },
