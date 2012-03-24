@@ -709,8 +709,8 @@ void stats_event_new_session(struct session *s)
 	struct stream_interface *si;
 
 	char addrs[4][INET6_ADDRSTRLEN + strlen(":65535") + 1] = {"","","",""};
-	int i, fd, port;
-	const void *sin_addr;
+	int i, fd, port = 0;
+	const void *sin_addr = NULL;
 	struct sockaddr_storage sock;
 	socklen_t addr_size;
 
