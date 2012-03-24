@@ -113,6 +113,24 @@ static inline void stats_event_listener_remove(struct session *s)
 	memset(&s->data_ctx.stats, 0, sizeof(s->data_ctx.stats));
 }
 
+/* Send a message to all registered event listeners.
+ */
+static inline void stats_event_listener_message_all(char *msg)
+{
+	struct session *curr;
+
+	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
+		struct stream_interface *si = &curr->si[1];
+
+		if (!(si->flags & SI_FL_DONT_WAKE) &&
+		    si->owner &&
+		    buffer_feed(si->ib, trash) == -1) {
+			si->ib->flags |= BF_SEND_DONTWAIT;
+			task_wakeup(si->owner, TASK_WOKEN_MSG);
+		}
+	}
+}
+
 /* allocate a new stats frontend named <name>, and return it
  * (or NULL in case of lack of memory).
  */
@@ -3232,30 +3250,17 @@ void stats_event_new_session(struct session *s)
 		}
 	}
 
-	snprintf(trash, sizeof(trash), "+ %u %s %s %s %s\n",
-	  s->uniq_id,
+	snprintf(trash, sizeof(trash), "+ %u %s %s %s %s\n", s->uniq_id,
 	  addrs[0], // inbound peer
 	  addrs[1], // inbound sock
 	  addrs[3], // outbound sock
 	  addrs[2]  // outbound peer
 	);
-
-	struct session *curr;
-	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
-		struct stream_interface *si = &curr->si[1];
-
-		if (!(si->flags & SI_FL_DONT_WAKE) &&
-		    si->owner &&
-		    buffer_feed(si->ib, trash) == -1) {
-			si->ib->flags |= BF_SEND_DONTWAIT;
-			task_wakeup(si->owner, TASK_WOKEN_MSG);
-		}
-	}
+	stats_event_listener_message_all(trash);
 }
 
-/* Called when a session's si[1]->state goes from SI_ST_EST to
- * SI_ST_CLO. Any stats listeners are notified of this session's
- * destruction.
+/* Called when the session argument's s->si[1]->state goes from SI_ST_EST
+ * to SI_ST_CLO. All stats listeners are notified of this destroy event.
  */
 void stats_event_end_session(struct session *s)
 {
@@ -3263,18 +3268,7 @@ void stats_event_end_session(struct session *s)
 		return;
 
 	snprintf(trash, sizeof(trash), "- %u\n", s->uniq_id);
-
-	struct session *curr;
-	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
-		struct stream_interface *si = &curr->si[1];
-
-		if (!(si->flags & SI_FL_DONT_WAKE) &&
-		    si->owner &&
-		    buffer_feed(si->ib, trash) == -1) {
-			si->ib->flags |= BF_SEND_DONTWAIT;
-			task_wakeup(si->owner, TASK_WOKEN_MSG);
-		}
-	}
+	stats_event_listener_message_all(trash);
 }
 
 static struct cfg_kw_list cfg_kws = {{ },{
