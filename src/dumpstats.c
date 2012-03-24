@@ -707,11 +707,10 @@ void stats_event_new_session(struct session *s)
 {
 	struct session *curr;
 	struct stream_interface *si;
-	int ret;
 
 	char addrs[4][INET6_ADDRSTRLEN + strlen(":65535") + 1] = {"","","",""};
 	int i, fd, port;
-	const void *addr;
+	const void *sin_addr;
 	struct sockaddr_storage sock;
 	socklen_t addr_size;
 
@@ -722,19 +721,20 @@ void stats_event_new_session(struct session *s)
 		if (!(i%2==0 ? getpeername : getsockname)(fd, (struct sockaddr *)&sock, &addr_size)) {
 			switch (sock.ss_family) {
 			case AF_INET:
-				addr = (const void *)&((struct sockaddr_in *)&sock)->sin_addr;
+				sin_addr = (const void *)&((struct sockaddr_in *)&sock)->sin_addr;
 				port = ntohs(((struct sockaddr_in *)&sock)->sin_port);
-				inet_ntop(sock.ss_family, addr, addrs[i], sizeof(addrs[i]));
-				snprintf(addrs[i], sizeof(addrs[i]), "%s:%d", addrs[i], port);
 				break;
-
 			case AF_INET6:
-				addr = (const void *)&((struct sockaddr_in6 *)&sock)->sin6_addr;
+				sin_addr = (const void *)&((struct sockaddr_in6 *)&sock)->sin6_addr;
 				port = ntohs(((struct sockaddr_in6 *)&sock)->sin6_port);
-				inet_ntop(sock.ss_family, addr, addrs[i], sizeof(addrs[i]));
-				snprintf(addrs[i], sizeof(addrs[i]), "%s:%d", addrs[i], port);
 				break;
-
+			}
+			switch (sock.ss_family) {
+			case AF_INET:
+			case AF_INET6:
+				inet_ntop(sock.ss_family, sin_addr, addrs[i], sizeof(addrs[i]));
+				snprintf(addrs[i]+strlen(addrs[i]), sizeof(addrs[i])-strlen(addrs[i])-1, ":%d", port);
+				break;
 			case AF_UNIX:
 			default:
 				sprintf(addrs[i], "%s", "unknown");
@@ -756,8 +756,7 @@ void stats_event_new_session(struct session *s)
 	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
 		si = &curr->si[1];
 
-		ret = buffer_feed(si->ib, trash);
-		if (ret == -1 && si->owner) {
+		if (si->owner && buffer_feed(si->ib, trash) == -1) {
 			si->ib->flags |= BF_SEND_DONTWAIT;
 			task_wakeup(si->owner, TASK_WOKEN_MSG);
 		}
@@ -768,7 +767,6 @@ void stats_event_end_session(struct session *s)
 {
 	struct session *curr;
 	struct stream_interface *si;
-	int ret;
 
 	if (LIST_ISEMPTY(&stats_event_listeners))
 		return;
@@ -777,8 +775,7 @@ void stats_event_end_session(struct session *s)
 	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
 		si = &curr->si[1];
 
-		ret = buffer_feed(si->ib, trash);
-		if (ret == -1 && si->owner) {
+		if (si->owner && buffer_feed(si->ib, trash) == -1) {
 			si->ib->flags |= BF_SEND_DONTWAIT;
 			task_wakeup(si->owner, TASK_WOKEN_MSG);
 		}
