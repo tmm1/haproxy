@@ -89,7 +89,7 @@ static inline void stats_event_listener_add(struct session *s)
 
 /* Remove a session from the list of listeners, but only if it is a
  * registered listener. This enables us to invoke the method on all
- * disconnecting stats sockets, to ensure they are cleaned up regardless
+ * disconnecting stats sockets to ensure they are cleaned up, regardless
  * of how many times they switch between streaming and other commands.
  */
 static inline void stats_event_listener_remove(struct session *s)
