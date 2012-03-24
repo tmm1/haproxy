@@ -61,9 +61,17 @@ static inline void stats_event_listener_add(struct session *s)
 
 static inline void stats_event_listener_remove(struct session *s)
 {
-	if (!LIST_ISEMPTY(&stats_event_listeners)) {
-		LIST_DEL(&s->data_ctx.events.list);
+	int found = 0;
+	struct session *curr;
+	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
+		if (curr == s) {
+			found = 1;
+			break;
+		}
 	}
+
+	if (found)
+		LIST_DEL(&s->data_ctx.events.list);
 
 	/* Re-initialize stats output */
 	memset(&s->data_ctx.stats, 0, sizeof(s->data_ctx.stats));
