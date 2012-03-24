@@ -74,7 +74,7 @@ const char stats_permission_denied_msg[] =
 	"Permission denied\n"
 	"";
 
-/* Keep track of sessions that want events streamed to them.
+/* Keep track of sessions that want streaming events (STAT_CLI_EVENT).
  */
 int stats_event_enabled = 0;
 static struct list stats_event_listeners = LIST_HEAD_INIT(stats_event_listeners);
@@ -399,6 +399,11 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 			si->st0 = STAT_CLI_O_ERR; // stats_dump_errors_to_buffer
 		}
 		else if (strcmp(args[1], "events") == 0) {
+			if (s->listener->perm.ux.level < ACCESS_LVL_OPER) {
+				s->data_ctx.cli.msg = stats_permission_denied_msg;
+				si->st0 = STAT_CLI_PRINT;
+				return 1;
+			}
 			si->st0 = STAT_CLI_EVENTS;
 			stats_event_listener_add(s);
 		}

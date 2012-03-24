@@ -8528,7 +8528,11 @@ show errors [<iid>]
 
 show events
   Dump a stream of events about sessions as they are created and destroyed.
-  Streaming will continue until a new command is sent over the stats socket.
+  Streaming will continue until a new command is received or the
+  connection is closed.
+
+  This command is restricted and can only be issued on sockets configured
+  for levels "operator" or "admin".
 
   Example:
     >>> $ echo "show events" | socat stdio,ignoreeof /tmp/sock1
