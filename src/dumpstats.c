@@ -74,7 +74,7 @@ const char stats_permission_denied_msg[] =
 	"Permission denied\n"
 	"";
 
-/* Keep track of sessions that want events streamed to them
+/* Keep track of sessions that want events streamed to them.
  */
 int stats_event_enabled = 0;
 static struct list stats_event_listeners = LIST_HEAD_INIT(stats_event_listeners);
@@ -87,8 +87,10 @@ static inline void stats_event_listener_add(struct session *s)
 	stats_event_enabled = 1;
 }
 
-/* Remove a session from the list of listeners, but only if it is in
- * the list already.
+/* Remove a session from the list of listeners, but only if it is a
+ * registered listener. This enables us to invoke the method on all
+ * disconnecting stats sockets, to ensure they are cleaned up regardless
+ * of how many times they switch between streaming and other commands.
  */
 static inline void stats_event_listener_remove(struct session *s)
 {
