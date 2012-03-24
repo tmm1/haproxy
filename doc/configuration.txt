@@ -8527,7 +8527,12 @@ show errors [<iid>]
     HTTP character for a header name.
 
 show events
-  Dump a stream of events about sessions as they are created and destroyed.
+  Dump a stream of events about sessions as they are created and
+  destroyed. The two possible event formats are:
+
+    "+ <session_id> <inbound_peer> <inbound_sock> <outbound_sock> <outbound_peer>\n"
+    "- <session_id>\n"
+
   Streaming will continue until a new command is received or the
   connection is closed.
 
