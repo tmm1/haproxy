@@ -231,7 +231,7 @@ struct session {
 			int bol;		/* pointer to beginning of current line */
 		} errors;
 		struct {
-			struct list list;
+			struct list list;	/* list of stats sessions in the STAT_CLI_EVENTS state */
 		} events;
 		struct {
 			const char *msg;	/* pointer to a persistent message to be returned in PRINT state */
