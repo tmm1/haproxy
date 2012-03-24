@@ -1658,7 +1658,7 @@ resync_stream_interface:
 	}
 
 	if ((s->si[0].state      == SI_ST_CLO &&
-	     s->si[0].prev_state == SI_ST_EST) ||
+	     s->si[0].prev_state == SI_ST_EST) &&
 	    (s->si[1].state      == SI_ST_CLO &&
 	     s->si[1].prev_state == SI_ST_EST)) {
 		stats_event_end_session(s);
