@@ -124,7 +124,7 @@ static inline void stats_event_listener_message_all(char *msg)
 
 		if (!(si->flags & SI_FL_DONT_WAKE) &&
 		    si->owner &&
-		    buffer_feed(si->ib, trash) == -1) {
+		    buffer_feed(si->ib, msg) == -1) {
 			si->ib->flags |= BF_SEND_DONTWAIT;
 			task_wakeup(si->owner, TASK_WOKEN_MSG);
 		}
