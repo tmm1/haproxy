@@ -1657,7 +1657,12 @@ resync_stream_interface:
 		s->do_log(s);
 	}
 
-	stats_event_end_session(s);
+	if ((s->si[0].state      == SI_ST_CLO &&
+	     s->si[0].prev_state == SI_ST_EST) ||
+	    (s->si[1].state      == SI_ST_CLO &&
+	     s->si[1].prev_state == SI_ST_EST)) {
+		stats_event_end_session(s);
+	}
 
 	/* the task MUST not be in the run queue anymore */
 	session_free(s);
