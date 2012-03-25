@@ -103,8 +103,12 @@ static inline void stats_event_listener_remove(struct session *s)
 		}
 	}
 
-	if (found)
+	if (found) {
+		if (s->data_ctx.events.id)
+			free(s->data_ctx.events.id);
+		s->data_ctx.events.id = NULL;
 		LIST_DEL(&s->data_ctx.events.list);
+	}
 
 	if (LIST_ISEMPTY(&stats_event_listeners))
 		stats_event_enabled = 0;
@@ -115,18 +119,26 @@ static inline void stats_event_listener_remove(struct session *s)
 
 /* Send a message to all registered event listeners.
  */
-static inline void stats_event_listener_message_all(char *msg)
+static inline void stats_event_listener_message_all(char *msg, struct session *s)
 {
 	struct session *curr;
 
 	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
 		struct stream_interface *si = &curr->si[1];
+		char *px_id;
 
-		if (!(si->flags & SI_FL_DONT_WAKE) &&
-		    si->owner &&
-		    buffer_feed(si->ib, msg) == -1) {
-			si->ib->flags |= BF_SEND_DONTWAIT;
-			task_wakeup(si->owner, TASK_WOKEN_MSG);
+		if (!(si->flags & SI_FL_DONT_WAKE) && si->owner) {
+			/* filter by proxy if required */
+			if ((px_id = curr->data_ctx.events.id)) {
+				if (strcmp(s->fe->id, px_id) != 0 ||
+				    ((s->be->cap & PR_CAP_BE) && strcmp(s->be->id, px_id) != 0))
+					continue;
+			}
+
+			if (buffer_feed(si->ib, msg) == -1) {
+				si->ib->flags |= BF_SEND_DONTWAIT;
+				task_wakeup(si->owner, TASK_WOKEN_MSG);
+			}
 		}
 	}
 }
@@ -422,8 +434,12 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 				si->st0 = STAT_CLI_PRINT;
 				return 1;
 			}
-			si->st0 = STAT_CLI_EVENTS;
+			if (*args[2])
+				s->data_ctx.events.id = strdup(args[2]);
+			else
+				s->data_ctx.events.id = NULL;
 			stats_event_listener_add(s);
+			si->st0 = STAT_CLI_EVENTS;
 		}
 		else { /* neither "stat" nor "info" nor "sess" nor "errors" nor "events" */
 			return 0;
@@ -3256,7 +3272,7 @@ void stats_event_new_session(struct session *s)
 	  addrs[3], // outbound sock
 	  addrs[2]  // outbound peer
 	);
-	stats_event_listener_message_all(trash);
+	stats_event_listener_message_all(trash, s);
 }
 
 /* Called when the session argument's s->si[1]->state goes from SI_ST_EST
@@ -3268,7 +3284,7 @@ void stats_event_end_session(struct session *s)
 		return;
 
 	snprintf(trash, sizeof(trash), "- %u\n", s->uniq_id);
-	stats_event_listener_message_all(trash);
+	stats_event_listener_message_all(trash, s);
 }
 
 static struct cfg_kw_list cfg_kws = {{ },{
