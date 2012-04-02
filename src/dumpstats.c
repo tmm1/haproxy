@@ -987,10 +987,6 @@ void stats_io_handler(struct stream_interface *si)
 	si->ib->rex = TICK_ETERNITY;
 	si->ob->wex = TICK_ETERNITY;
 
-	/* no timeouts when streaming events */
-	if (si->st0 == STAT_CLI_EVENTS)
-		s->req->rex = TICK_ETERNITY;
-
  out:
 	DPRINTF(stderr, "%s@%d: st=%d, rqf=%x, rpf=%x, rql=%d, rqs=%d, rl=%d, rs=%d\n",
 		__FUNCTION__, __LINE__,

@@ -8592,7 +8592,7 @@ debug sess [proxy:<proxy_name>[:<server_name>]]
   for levels "operator" or "admin".
 
   Example:
-    >>> $ echo "debug sess" | socat stdio,ignoreeof /tmp/sock1
+    >>> $ echo "set timeout cli 3600; debug sess" | socat stdio,ignoreeof /tmp/sock1
         + 1 127.0.0.1:50869 127.0.0.1:9418 127.0.0.1:50870 127.0.0.1:6000
         - 1
         + 2 127.0.0.1:50874 127.0.0.1:9418 127.0.0.1:50875 127.0.0.1:6000
