@@ -104,9 +104,8 @@ static inline void stats_event_listener_remove(struct session *s)
 	}
 
 	if (found) {
-		if (s->data_ctx.events.id)
-			free(s->data_ctx.events.id);
-		s->data_ctx.events.id = NULL;
+		s->data_ctx.events.px = NULL;
+		s->data_ctx.events.srv = NULL;
 		LIST_DEL(&s->data_ctx.events.list);
 	}
 
@@ -125,14 +124,18 @@ static inline void stats_event_listener_message_all(char *msg, struct session *s
 
 	list_for_each_entry(curr, &stats_event_listeners, data_ctx.events.list) {
 		struct stream_interface *si = &curr->si[1];
-		char *px_id;
+		struct proxy *px;
+		struct server *srv;
 
 		if (!(si->flags & SI_FL_DONT_WAKE) && si->owner) {
-			/* filter by proxy if required */
-			if ((px_id = curr->data_ctx.events.id)) {
-				if (strcmp(s->fe->id, px_id) != 0 ||
-				    ((s->be->cap & PR_CAP_BE) && strcmp(s->be->id, px_id) != 0))
-					continue;
+			/* filter by proxy and server if required */
+			if ((px = curr->data_ctx.events.px)) {
+				if (s->be != px && s->fe != px)
+					continue; /* ignore */
+				if ((srv = curr->data_ctx.events.srv)) {
+					if (s->srv != srv)
+						continue; /* ignore */
+				}
 			}
 
 			if (buffer_feed(si->ib, msg) == -1) {
@@ -434,10 +437,39 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 				si->st0 = STAT_CLI_PRINT;
 				return 1;
 			}
-			if (*args[2])
-				s->data_ctx.events.id = strdup(args[2]);
-			else
-				s->data_ctx.events.id = NULL;
+			if (*args[2] && !strncmp(args[2], "proxy", 5)) {
+				struct proxy *px = NULL;
+				struct server *srv = NULL;
+				char *px_name = args[2] + 6, *srv_name;
+
+				if ((srv_name = strchr(px_name, ':'))) {
+					*srv_name = 0;
+					srv_name += 1;
+				}
+
+				px = findproxy(px_name, PR_CAP_FE|PR_CAP_BE);
+				if (!px) {
+					s->data_ctx.cli.msg = "Invalid proxy filter for event stream.";
+					si->st0 = STAT_CLI_PRINT;
+					return 1;
+				}
+
+				if (srv_name && *srv_name) {
+					srv = findserver(px, srv_name);
+					if (!srv) {
+						s->data_ctx.cli.msg = "Invalid server filter for event stream.";
+						si->st0 = STAT_CLI_PRINT;
+						return 1;
+					}
+				}
+
+				s->data_ctx.events.srv = srv;
+				s->data_ctx.events.px = px;
+			} else {
+				s->data_ctx.events.srv = NULL;
+				s->data_ctx.events.px = NULL;
+			}
+
 			stats_event_listener_add(s);
 			si->st0 = STAT_CLI_EVENTS;
 		}

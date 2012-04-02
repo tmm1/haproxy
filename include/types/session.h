@@ -232,7 +232,8 @@ struct session {
 		} errors;
 		struct {
 			struct list list;	/* list of stats sessions in the STAT_CLI_EVENTS state */
-			char *id;		/* if not NULL, id of the be/fe proxy to filter on */
+			struct proxy *px;	/* if not NULL, only send events associated with this proxy */
+			struct server *srv;	/* if not NULL, only send events associated with this server */
 		} events;
 		struct {
 			const char *msg;	/* pointer to a persistent message to be returned in PRINT state */

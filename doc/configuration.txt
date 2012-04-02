@@ -8526,7 +8526,7 @@ show errors [<iid>]
     is the slash ('/') in header name "header/bizarre", which is not a valid
     HTTP character for a header name.
 
-show events [<name>]
+show events [proxy:<proxy_name>[:<server_name>]]
 
   Dump a stream of events about sessions as they are added and removed.
   The two possible event formats are:
@@ -8535,8 +8535,8 @@ show events [<name>]
     "- <session_id>\n"
 
   Streaming will continue until a new command is received or the
-  connection is closed. If <name> is specified, the limit the dump to events
-  concerning either frontend or backend whose NAME is <name>.
+  connection is closed. If <proxy_name> or <server_name> is specified, limit to events
+  concerning only the proxy and server specified.
 
   This command is restricted and can only be issued on sockets configured
   for levels "operator" or "admin".
