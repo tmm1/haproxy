@@ -8579,10 +8579,10 @@ show stat [<iid> <type> <sid>]
 debug sess [proxy:<proxy_name>[:<server_name>]]
 
   Dump a stream of events about sessions as they are added and removed.
-  The two possible event formats are:
+  The possible event formats are "Forward" and "Close":
 
-    "+ <session_id> <in_peer> <in_sock> <out_sock> <out_peer>\n"
-    "- <session_id>\n"
+    "F <session_id> <in_peer> - <in_sock> | <out_sock> - <out_peer>\n"
+    "C <session_id>\n"
 
   Streaming will continue until a new command is received or the
   connection is closed. If <proxy_name> or <server_name> is specified, limit to

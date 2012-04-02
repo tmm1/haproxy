@@ -3298,7 +3298,7 @@ void stats_event_new_session(struct session *s)
 		}
 	}
 
-	snprintf(trash, sizeof(trash), "+ %u %s %s %s %s\n", s->uniq_id,
+	snprintf(trash, sizeof(trash), "F %u %s - %s | %s - %s\n", s->uniq_id,
 	  addrs[0], // inbound peer
 	  addrs[1], // inbound sock
 	  addrs[3], // outbound sock
@@ -3315,7 +3315,7 @@ void stats_event_end_session(struct session *s)
 	if (LIST_ISEMPTY(&stats_event_listeners))
 		return;
 
-	snprintf(trash, sizeof(trash), "- %u\n", s->uniq_id);
+	snprintf(trash, sizeof(trash), "C %u\n", s->uniq_id);
 	stats_event_listener_message_all(trash, s);
 }
 
