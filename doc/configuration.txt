@@ -8526,28 +8526,6 @@ show errors [<iid>]
     is the slash ('/') in header name "header/bizarre", which is not a valid
     HTTP character for a header name.
 
-show events [proxy:<proxy_name>[:<server_name>]]
-
-  Dump a stream of events about sessions as they are added and removed.
-  The two possible event formats are:
-
-    "+ <session_id> <inbound_peer> <inbound_sock> <outbound_sock> <outbound_peer>\n"
-    "- <session_id>\n"
-
-  Streaming will continue until a new command is received or the
-  connection is closed. If <proxy_name> or <server_name> is specified, limit to events
-  concerning only the proxy and server specified.
-
-  This command is restricted and can only be issued on sockets configured
-  for levels "operator" or "admin".
-
-  Example:
-    >>> $ echo "show events" | socat stdio,ignoreeof /tmp/sock1
-        + 1 127.0.0.1:50869 127.0.0.1:9418 127.0.0.1:50870 127.0.0.1:6000
-        - 1
-        + 2 127.0.0.1:50874 127.0.0.1:9418 127.0.0.1:50875 127.0.0.1:6000
-        - 2
-
 show info
   Dump info about haproxy status on current process.
 
@@ -8598,6 +8576,27 @@ show stat [<iid> <type> <sid>]
     A similar empty line appears at the end of the second block (stats) so that
     the reader knows the output has not been truncated.
 
+debug sess [proxy:<proxy_name>[:<server_name>]]
+
+  Dump a stream of events about sessions as they are added and removed.
+  The two possible event formats are:
+
+    "+ <session_id> <in_peer> <in_sock> <out_sock> <out_peer>\n"
+    "- <session_id>\n"
+
+  Streaming will continue until a new command is received or the
+  connection is closed. If <proxy_name> or <server_name> is specified, limit to
+  events concerning only the proxy and server specified.
+
+  This command is restricted and can only be issued on sockets configured
+  for levels "operator" or "admin".
+
+  Example:
+    >>> $ echo "debug sess" | socat stdio,ignoreeof /tmp/sock1
+        + 1 127.0.0.1:50869 127.0.0.1:9418 127.0.0.1:50870 127.0.0.1:6000
+        - 1
+        + 2 127.0.0.1:50874 127.0.0.1:9418 127.0.0.1:50875 127.0.0.1:6000
+        - 2
 
 /*
  * Local variables:

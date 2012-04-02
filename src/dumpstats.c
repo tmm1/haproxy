@@ -62,12 +62,12 @@ const char stats_sock_usage_msg[] =
 	"  show stat      : report counters for each proxy and server\n"
 	"  show errors    : report last request and response errors for each proxy\n"
 	"  show sess [id] : report the list of current sessions or dump this session\n"
-	"  show events    : stream events about proxied sessions\n"
 	"  get weight     : report a server's current weight\n"
 	"  set weight     : change a server's weight\n"
 	"  set timeout    : change a timeout setting\n"
 	"  disable server : set a server in maintenance mode\n"
 	"  enable server  : re-enable a server that was previously in maintenance mode\n"
+	"  debug sess     : stream events about proxied sessions\n"
 	"";
 
 const char stats_permission_denied_msg[] =
@@ -382,7 +382,51 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 		args[arg] = line;
 
 	s->data_ctx.stats.flags = 0;
-	if (strcmp(args[0], "show") == 0) {
+	if (strcmp(args[0], "debug") == 0) {
+		if (strcmp(args[1], "sess") == 0) {
+			if (s->listener->perm.ux.level < ACCESS_LVL_OPER) {
+				s->data_ctx.cli.msg = stats_permission_denied_msg;
+				si->st0 = STAT_CLI_PRINT;
+				return 1;
+			}
+			if (*args[2] && !strncmp(args[2], "proxy", 5)) {
+				struct proxy *px = NULL;
+				struct server *srv = NULL;
+				char *px_name = args[2] + 6, *srv_name;
+
+				if ((srv_name = strchr(px_name, ':'))) {
+					*srv_name = 0;
+					srv_name += 1;
+				}
+
+				px = findproxy(px_name, PR_CAP_FE|PR_CAP_BE);
+				if (!px) {
+					s->data_ctx.cli.msg = "Invalid proxy filter for event stream.";
+					si->st0 = STAT_CLI_PRINT;
+					return 1;
+				}
+
+				if (srv_name && *srv_name) {
+					srv = findserver(px, srv_name);
+					if (!srv) {
+						s->data_ctx.cli.msg = "Invalid server filter for event stream.";
+						si->st0 = STAT_CLI_PRINT;
+						return 1;
+					}
+				}
+
+				s->data_ctx.events.srv = srv;
+				s->data_ctx.events.px = px;
+			} else {
+				s->data_ctx.events.srv = NULL;
+				s->data_ctx.events.px = NULL;
+			}
+
+			stats_event_listener_add(s);
+			si->st0 = STAT_CLI_EVENTS;
+		}
+	}
+	else if (strcmp(args[0], "show") == 0) {
 		if (strcmp(args[1], "stat") == 0) {
 			if (*args[2] && *args[3] && *args[4]) {
 				s->data_ctx.stats.flags |= STAT_BOUND;
@@ -430,48 +474,6 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 			s->data_ctx.errors.px = NULL;
 			s->data_state = DATA_ST_INIT;
 			si->st0 = STAT_CLI_O_ERR; // stats_dump_errors_to_buffer
-		}
-		else if (strcmp(args[1], "events") == 0) {
-			if (s->listener->perm.ux.level < ACCESS_LVL_OPER) {
-				s->data_ctx.cli.msg = stats_permission_denied_msg;
-				si->st0 = STAT_CLI_PRINT;
-				return 1;
-			}
-			if (*args[2] && !strncmp(args[2], "proxy", 5)) {
-				struct proxy *px = NULL;
-				struct server *srv = NULL;
-				char *px_name = args[2] + 6, *srv_name;
-
-				if ((srv_name = strchr(px_name, ':'))) {
-					*srv_name = 0;
-					srv_name += 1;
-				}
-
-				px = findproxy(px_name, PR_CAP_FE|PR_CAP_BE);
-				if (!px) {
-					s->data_ctx.cli.msg = "Invalid proxy filter for event stream.";
-					si->st0 = STAT_CLI_PRINT;
-					return 1;
-				}
-
-				if (srv_name && *srv_name) {
-					srv = findserver(px, srv_name);
-					if (!srv) {
-						s->data_ctx.cli.msg = "Invalid server filter for event stream.";
-						si->st0 = STAT_CLI_PRINT;
-						return 1;
-					}
-				}
-
-				s->data_ctx.events.srv = srv;
-				s->data_ctx.events.px = px;
-			} else {
-				s->data_ctx.events.srv = NULL;
-				s->data_ctx.events.px = NULL;
-			}
-
-			stats_event_listener_add(s);
-			si->st0 = STAT_CLI_EVENTS;
 		}
 		else { /* neither "stat" nor "info" nor "sess" nor "errors" nor "events" */
 			return 0;
