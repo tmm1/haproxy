@@ -3290,6 +3290,8 @@ void stats_event_new_session(struct session *s)
 				snprintf(addrs[i]+strlen(addrs[i]), sizeof(addrs[i])-strlen(addrs[i])-1, ":%d", port);
 				break;
 			case AF_UNIX:
+				sprintf(addrs[i], "unix:%d", s->listener->luid);
+				break;
 			default:
 				sprintf(addrs[i], "%s", "unknown");
 			}
