@@ -876,7 +876,6 @@ void stats_io_handler(struct stream_interface *si)
 
 			if (si->st0 == STAT_CLI_EVENTS)
 				stats_event_listener_remove(s);
-
 			si->st0 = STAT_CLI_PROMPT;
 
 			if (len) {
