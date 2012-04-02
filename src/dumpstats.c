@@ -425,6 +425,9 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 			stats_event_listener_add(s);
 			si->st0 = STAT_CLI_EVENTS;
 		}
+		else { /* not "sess" */
+			return 0;
+		}
 	}
 	else if (strcmp(args[0], "show") == 0) {
 		if (strcmp(args[1], "stat") == 0) {
@@ -475,7 +478,7 @@ int stats_sock_parse_request(struct stream_interface *si, char *line)
 			s->data_state = DATA_ST_INIT;
 			si->st0 = STAT_CLI_O_ERR; // stats_dump_errors_to_buffer
 		}
-		else { /* neither "stat" nor "info" nor "sess" nor "errors" nor "events" */
+		else { /* neither "stat" nor "info" nor "sess" nor "errors" */
 			return 0;
 		}
 	}
